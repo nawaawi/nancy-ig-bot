@@ -14,7 +14,6 @@ app.get('/', (req, res) => {
   res.status(200).send('Nancy Bot is running! IG + FB ready! Webhook at /webhook - by Nawa');
 });
 
-// DEBUG ENDPOINT - buat cek token kepasang gak
 app.get('/debug', (req, res) => {
   res.json({
     status: 'Nancy Bot Debug',
@@ -78,17 +77,30 @@ app.post('/webhook', async (req, res) => {
     lastEvents.push({time: new Date().toISOString(), object: body.object, body: JSON.stringify(body).substring(0,500)});
     if (lastEvents.length > 20) lastEvents.shift();
 
-    // === INSTAGRAM ===
+    // === INSTAGRAM - HANDLE 2 FORMAT (messaging & changes) ===
     if (body.object === 'instagram') {
       for (const entry of body.entry || []) {
+        // Format 1: entry.messaging (real IG DM)
         for (const msg of entry.messaging || []) {
           const senderId = msg.sender?.id;
           const text = msg.message?.text;
-          console.log('IG MSG from', senderId, ':', text);
+          console.log('IG MSG [messaging] from', senderId, ':', text);
           if (senderId && text && PAGE_ACCESS_TOKEN) {
             await sendReply(senderId, `Hai IG! Nancy Bot dapet: "${text}" 🤖`, PAGE_ACCESS_TOKEN);
-          } else {
-            console.log('IG skip - sender:', senderId, 'text:', text, 'token ada:', !!PAGE_ACCESS_TOKEN);
+          }
+        }
+        // Format 2: entry.changes with field=messages (test & some IG events)
+        for (const change of entry.changes || []) {
+          if (change.field === 'messages') {
+            const val = change.value || {};
+            const senderId = val.sender?.id || val.from?.id;
+            const text = val.message?.text || val.text;
+            console.log('IG MSG [changes.messages] from', senderId, ':', text);
+            if (senderId && text && PAGE_ACCESS_TOKEN && senderId !== '12334' && senderId !== '0') {
+              await sendReply(senderId, `Hai IG! Nancy Bot dapet: "${text}" 🤖`, PAGE_ACCESS_TOKEN);
+            } else {
+              console.log('IG test event skipped (ID test):', senderId);
+            }
           }
         }
       }
@@ -104,6 +116,17 @@ app.post('/webhook', async (req, res) => {
             const tokenToUse = PAGE_ACCESS_TOKEN_FB || PAGE_ACCESS_TOKEN;
             console.log('FB MSG from', senderId, ':', text);
             await sendReply(senderId, `Hai FB! Nancy Bot dapet: "${text}" 💙`, tokenToUse);
+          }
+        }
+        for (const change of entry.changes || []) {
+          if (change.field === 'messages') {
+            const val = change.value || {};
+            const senderId = val.sender?.id;
+            const text = val.message?.text;
+            console.log('FB MSG [changes] from', senderId, ':', text);
+            if (senderId && text && PAGE_ACCESS_TOKEN) {
+              await sendReply(senderId, `Hai FB! Nancy Bot dapet: "${text}" 💙`, PAGE_ACCESS_TOKEN);
+            }
           }
         }
       }
